@@ -47,4 +47,14 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
+*.png
 
+
+# Environment variables file
+.env
+credentials.json
+
+# Kudosflow configuration files
+.kudosflow/json
+json
+src/SceneGraphManager

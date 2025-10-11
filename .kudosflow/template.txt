@@ -1,0 +1,494 @@
+<specification>
+# SceneGraphManager A2A SDK移行計画
+
+## 📋 概要
+
+SceneGraphManagerの独自A2A実装を公式A2A SDKに置き換え、標準準拠とメンテナンス性向上を実現します。
+
+## 🎯 移行目標
+
+- **標準準拠**: 公式A2A Protocol準拠
+- **機能拡張**: ストリーミング、Push通知、認証サポート
+- **保守性向上**: 公式SDK使用によるメンテナンス負荷軽減
+- **互換性維持**: 既存機能の動作保証
+
+## 📁 変更対象ファイル一覧
+
+### Phase 1: 依存関係とコア実装の更新
+
+```
+1. package.json                                          [依存関係変更]
+2. src/SceneGraphManager/lib/models/factory.ts           [A2A統合更新]
+3. src/SceneGraphManager/a2a/A2AClient.ts               [削除]
+4. src/SceneGraphManager/a2a/A2AEndpoint.ts             [大幅変更]
+5. src/SceneGraphManager/a2a/A2AToolGenerator.ts        [SDK統合]
+6. src/SceneGraphManager/a2a/types/index.ts             [簡素化]
+7. src/SceneGraphManager/types/a2a.ts                   [SDK型統合]
+```
+
+### Phase 2: 設定ファイルの更新
+
+```
+8. json/research/main.json                              [A2A設定更新]
+9. json/research/quality-evaluation.json               [エンドポイント更新]
+10. json/research/research-execution.json              [エンドポイント更新]
+11. json/research/task-creation.json                   [エンドポイント更新]
+```
+
+### Phase 3: CLI統合の調整
+
+```
+12. src/kudos.tsx                                       [軽微調整]
+```
+
+## 🔄 段階的移行戦略
+
+### **Phase 1: コアシステム移行** (優先度: 高)
+
+### 1.1 依存関係の更新
+
+**ファイル**: `package.json`
+
+```
+- "axios": "^1.11.0",
+- "@types/axios": "^0.14.4",
++ "@a2a-js/sdk": "^latest",
++ "express": "^4.x.x",  // peer dependency
+```
+
+### 1.2 A2Aクライアント実装の置き換え
+
+**ファイル**: `src/SceneGraphManager/a2a/A2AClient.ts`
+
+[削除] - 公式SDKのA2AClientを使用
+
+**ファイル**: `src/SceneGraphManager/a2a/A2AToolGenerator.ts`
+
+```tsx
+// 変更前
+import { A2AClient } from "./A2AClient.js";
+
+// 変更後
+import { A2AClient } from "@a2a-js/sdk/client";
+```
+
+### 1.3 ModelFactoryManagerの更新
+
+**ファイル**: `src/SceneGraphManager/lib/models/factory.ts`
+
+```tsx
+// 主要変更点
+- import { A2AClient } from "../../a2a/A2AClient.js";
++ import { A2AClient } from "@a2a-js/sdk/client";
+
+// SDK準拠のAPI使用
+static async configureA2A(config) {
+  const client = await A2AClient.fromCardUrl(config.url);
+  // ...
+}
+```
+
+### **Phase 2: 設定ファイル標準化** (優先度: 中)
+
+### 2.1 A2Aクライアント設定の標準化
+
+**ファイル**: `json/research/main.json`
+
+```json
+{
+  "a2aClients": {
+    "task_agent": {
+      "cardUrl": "http://localhost:3001/.well-known/agent-card.json",
+      "timeout": 30000
+    }
+  }
+}
+```
+
+### 2.2 A2Aエンドポイント設定のAgentCard準拠
+
+**ファイル**: `json/research/*-*.json`
+
+```json
+{
+  "config": {
+    "a2aEndpoint": {
+      "agentCard": {
+        "name": "TaskCreationAgent",
+        "description": "...",
+        "url": "http://localhost:3001",
+        "version": "1.0.0",
+        "capabilities": {
+          "streaming": false,
+          "pushNotifications": false,
+          "stateTransitionHistory": true
+        },
+        "skills": [...]
+      },
+      "port": 3001
+    }
+  }
+}
+```
+
+### **Phase 3: 統合テスト・調整** (優先度: 低)
+
+### 3.1 CLI統合の調整
+
+**ファイル**: `src/kudos.tsx`
+
+```tsx
+// 必要に応じてインポート調整
+// 基本的には変更不要
+```
+
+## ⚠️ 重要な変更点
+
+### API変更
+
+| 従来 | A2A SDK | 影響 |
+| --- | --- | --- |
+| `client.discover(url)` | `A2AClient.fromCardUrl(cardUrl)` | 初期化方法変更 |
+| `client.sendTask()` | `client.sendMessage()` | メソッド名変更 |
+| カスタムJSON-RPC | 標準A2A Protocol | プロトコル変更 |
+
+### 新機能追加
+
+- **ストリーミング**: `client.sendMessageStream()`
+- **Push通知**: `pushNotificationConfig`
+- **認証**: `AuthenticationHandler`
+- **タスクキャンセル**: `client.cancelTask()`
+
+### 削除される機能
+
+- 独自実装のJSON-RPCハンドリング
+- カスタムエラーハンドリング（SDK標準に移行）
+
+## 📈 移行メリット
+
+### 即座のメリット
+
+- ✅ 公式サポート・メンテナンス
+- ✅ 標準プロトコル準拠
+- ✅ バグ修正・セキュリティ更新
+
+### 将来のメリット
+
+- 🚀 ストリーミング対応
+- 🔔 Push通知機能
+- 🔐 認証・セキュリティ強化
+- 📱 モバイル・サーバーレス対応
+
+## 💡 推奨実装順序
+
+1. **`package.json`** - 依存関係更新
+2. **`factory.ts`** - A2A統合の核心部分
+3. **`A2AClient.ts`** - 削除（SDK使用）
+4. **`A2AToolGenerator.ts`** - SDK統合
+5. **`A2AEndpoint.ts`** - サーバー実装更新
+6. **`types/a2a.ts`** - 型定義調整
+7. **JSON設定ファイル群** - 設定標準化
+8. **`kudos.tsx`** - 最終調整
+
+## 🔍 詳細実装ガイド
+
+### Phase 1: 依存関係とコア実装
+
+### ステップ 1: package.json更新
+
+```tsx
+{
+  "dependencies": {
+    "@a2a-js/sdk": "^latest",
+    "express": "^4.x.x"
+  }
+}
+```
+
+**削除**: `axios`, `@types/axios`, `@types/express`
+
+### ステップ 2: ModelFactoryManager更新
+
+```tsx
+// src/SceneGraphManager/lib/models/factory.ts
+import { A2AClient } from "@a2a-js/sdk/client";
+
+static async configureA2A(a2aConfig: Record<string, { cardUrl: string; timeout?: number }>) {
+  for (const [agentName, config] of Object.entries(a2aConfig)) {
+    const client = await A2AClient.fromCardUrl(config.cardUrl, {
+      fetchImpl: fetch // カスタムfetch設定可能
+    });
+    this.a2aClients.set(agentName, client);
+  }
+}
+```
+
+### ステップ 3: A2AToolGenerator SDK統合
+
+```tsx
+// src/SceneGraphManager/a2a/A2AToolGenerator.ts
+import { A2AClient, MessageSendParams } from "@a2a-js/sdk/client";
+import { DynamicTool } from "@langchain/core/tools";
+
+export class A2AToolGenerator {
+  static generateToolsWithUrlMap(
+    clients: Map<string, A2AClient>,
+    urlMap: Record<string, { cardUrl: string }>
+  ): Tool[] {
+    const tools: Tool[] = [];
+    
+    for (const [agentName, client] of clients) {
+      // Send Message Tool (SDK準拠)
+      const sendMessageTool = new DynamicTool({
+        name: `send_message_to_${agentName}`,
+        description: `Send a message to ${agentName} agent`,
+        func: async (input: any) => {
+          const params: MessageSendParams = {
+            message: {
+              messageId: uuidv4(),
+              role: "user",
+              parts: [{ kind: "text", text: input.message }],
+              kind: "message"
+            }
+          };
+          
+          const response = await client.sendMessage(params);
+          return JSON.stringify(response);
+        }
+      });
+      
+      tools.push(sendMessageTool);
+    }
+    
+    return tools;
+  }
+}
+```
+
+### Phase 2: サーバー実装の更新
+
+### ステップ 4: A2AEndpoint SDK準拠実装
+
+```tsx
+// src/SceneGraphManager/a2a/A2AEndpoint.ts
+import express from "express";
+import { 
+  AgentExecutor,
+  RequestContext,
+  ExecutionEventBus,
+  DefaultRequestHandler,
+  InMemoryTaskStore,
+  A2AExpressApp
+} from "@a2a-js/sdk/server";
+import type { AgentCard } from "@a2a-js/sdk";
+
+export class A2AEndpoint {
+  private agentCard: AgentCard;
+  private executor: AgentExecutor;
+  
+  constructor(config: A2AEndpointConfig) {
+    this.agentCard = {
+      name: config.name,
+      description: config.description,
+      protocolVersion: "0.3.0",
+      version: "1.0.0",
+      url: `http://localhost:${config.port}/`,
+      skills: config.skills || [],
+      capabilities: {
+        streaming: false,
+        pushNotifications: false,
+        stateTransitionHistory: true
+      }
+    };
+    
+    this.executor = new CustomAgentExecutor(config.executor);
+  }
+  
+  public run(port: number = 3000): void {
+    const taskStore = new InMemoryTaskStore();
+    const requestHandler = new DefaultRequestHandler(
+      this.agentCard,
+      taskStore,
+      this.executor
+    );
+    
+    const appBuilder = new A2AExpressApp(requestHandler);
+    const app = appBuilder.setupRoutes(express());
+    
+    app.listen(port, () => {
+      console.log(`A2A Endpoint running on port ${port}`);
+    });
+  }
+}
+
+class CustomAgentExecutor implements AgentExecutor {
+  constructor(private userExecutor: Function) {}
+  
+  async execute(
+    requestContext: RequestContext,
+    eventBus: ExecutionEventBus
+  ): Promise<void> {
+    const result = await this.userExecutor(
+      requestContext.message.parts[0].text,
+      requestContext.sessionId
+    );
+    
+    eventBus.publish({
+      kind: "message",
+      messageId: uuidv4(),
+      role: "agent",
+      parts: [{ kind: "text", text: result }],
+      contextId: requestContext.contextId
+    });
+    
+    eventBus.finished();
+  }
+  
+  cancelTask = async (): Promise<void> => {};
+}
+```
+
+### Phase 3: 設定ファイル標準化
+
+### ステップ 5: JSON設定ファイル更新
+
+**main.json**:
+
+```tsx
+{
+  "a2aClients": {
+    "task_agent": {
+      "cardUrl": "http://localhost:3001/.well-known/agent-card.json",
+      "timeout": 30000
+    },
+    "research_agent": {
+      "cardUrl": "http://localhost:3002/.well-known/agent-card.json",
+      "timeout": 30000
+    },
+    "quality_agent": {
+      "cardUrl": "http://localhost:3003/.well-known/agent-card.json",
+      "timeout": 30000
+    }
+  }
+}
+```
+
+**各サブエージェント設定**:
+
+```tsx
+{
+  "config": {
+    "a2aEndpoint": {
+      "agentCard": {
+        "name": "TaskCreationAgent",
+        "description": "Creates and manages research tasks",
+        "protocolVersion": "0.3.0",
+        "version": "1.0.0",
+        "url": "http://localhost:3001/",
+        "capabilities": {
+          "streaming": false,
+          "pushNotifications": false,
+          "stateTransitionHistory": true
+        },
+        "skills": [
+          {
+            "id": "task_creation",
+            "name": "Task Creation",
+            "description": "Break down research requests into tasks"
+          }
+        ]
+      },
+      "port": 3001
+    }
+  }
+}
+```
+
+## 🚀 新機能活用例
+
+### ストリーミング対応
+
+```tsx
+// 将来の拡張例
+const stream = client.sendMessageStream({
+  message: {
+    messageId: uuidv4(),
+    role: "user",
+    parts: [{ kind: "text", text: "研究を開始してください" }],
+    kind: "message"
+  }
+});
+
+for await (const event of stream) {
+  console.log("リアルタイム更新:", event);
+}
+```
+
+### Push通知対応
+
+```tsx
+// 長時間タスク用Push通知
+const response = await client.sendMessage({
+  message: {
+    messageId: uuidv4(),
+    role: "user",
+    parts: [{ kind: "text", text: "詳細な市場調査を実行してください" }],
+    kind: "message"
+  },
+  configuration: {
+    pushNotificationConfig: {
+      url: "https://your-app.com/webhook/task-updates",
+      token: "your-auth-token"
+    }
+  }
+});
+```
+
+### 認証対応
+
+```tsx
+// 認証付きクライアント
+import { createAuthenticatingFetchWithRetry, AuthenticationHandler } from "@a2a-js/sdk/client";
+
+const authHandler: AuthenticationHandler = {
+  headers: async () => ({
+    Authorization: `Bearer ${await getToken()}`
+  }),
+  shouldRetryWithHeaders: async (req, res) => {
+    if (res.status === 401) {
+      const newToken = await refreshToken();
+      return { Authorization: `Bearer ${newToken}` };
+    }
+    return undefined;
+  }
+};
+
+const authFetch = createAuthenticatingFetchWithRetry(fetch, authHandler);
+const client = await A2AClient.fromCardUrl(cardUrl, { fetchImpl: authFetch });
+```
+</specification>
+
+<Project>
+```plain text
+${{kudosflow_tree}}
+```
+</Project>
+
+<${{kudosflow_filename}}>
+```typescript
+${{kudosflow_content}}
+```
+</${{kudosflow_filename}}>
+
+QUERY： ${{kudosflow_query}}
+
+<LOG>
+```bash
+${{kudosflow_terminal}}
+```
+</LOG>
+
+CAUTION:
+Show a list of file names with full path, if answering a question requires checking specific files in the project. Do not provide an answer before checking.
+And if there are multiple files that need to be edited, confirm with the user which file should be edited. 
+Make the modifications minimal and do not add any new features.
