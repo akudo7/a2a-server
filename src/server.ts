@@ -1,11 +1,17 @@
-// src/main.ts
+// src/server.ts
 import path from "path";
 import * as dotenv from "dotenv";
+import express from "express";
 import { WorkflowEngine } from "./SceneGraphManager/lib/index.js";
 import { WorkflowConfig } from "./SceneGraphManager/types/index.js";
 import { readFileSync, existsSync } from "fs";
 import { A2AEndpoint } from "./SceneGraphManager/a2a/A2AEndpoint.js";
 import { fileURLToPath } from "url";
+
+// A2A SDK imports
+import type { AgentCard } from "@a2a-js/sdk";
+import { DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
+import { A2AExpressApp } from "@a2a-js/sdk/server/express";
 
 // ES Module で __filename, __dirname を取得
 const __filename = fileURLToPath(import.meta.url);
@@ -56,15 +62,62 @@ const loadWorkflowConfig = (configPath: string): WorkflowConfig => {
 };
 
 /**
- * JSONファイルパスからPNGファイル名を生成
+ * 設定ファイルからAgentCardを構築（SDK準拠）
  */
-const getPngFileName = (jsonPath: string): string => {
-  const fileName = path.basename(jsonPath, ".json");
-  return `${fileName}.png`;
+const buildAgentCardFromConfig = (
+  workflowConfig: WorkflowConfig,
+  port: number
+): AgentCard => {
+  const a2aConfig = workflowConfig.config?.a2aEndpoint;
+
+  // 設定ファイルにagentCardがある場合はそれを基に構築
+  if (a2aConfig?.agentCard) {
+    const configCard = a2aConfig.agentCard;
+    return {
+      name: configCard.name,
+      description: configCard.description,
+      protocolVersion: configCard.protocolVersion || "0.3.0", // ✅ 必須プロパティ
+      version: configCard.version || "1.0.0",
+      url: configCard.url || `http://localhost:${port}/`,
+      defaultInputModes: configCard.defaultInputModes || ["text/plain"], // ✅ 必須プロパティ
+      defaultOutputModes: configCard.defaultOutputModes || ["text/plain"], // ✅ 必須プロパティ
+      capabilities: {
+        streaming: configCard.capabilities?.streaming || false,
+        pushNotifications: configCard.capabilities?.pushNotifications || false,
+        stateTransitionHistory:
+          configCard.capabilities?.stateTransitionHistory || true,
+      },
+      skills: configCard.skills || [],
+    };
+  }
+
+  // フォールバック（基本設定）
+  const agentName =
+    a2aConfig?.name || workflowConfig.config?.name || "WorkflowAgent";
+  const agentDescription =
+    a2aConfig?.description ||
+    workflowConfig.config?.description ||
+    "A workflow agent that processes tasks through multiple steps";
+
+  return {
+    name: agentName,
+    description: agentDescription,
+    protocolVersion: "0.3.0", // ✅ 必須プロパティ
+    version: "1.0.0",
+    url: `http://localhost:${port}/`,
+    defaultInputModes: ["text/plain"], // ✅ 必須プロパティ
+    defaultOutputModes: ["text/plain"], // ✅ 必須プロパティ
+    capabilities: {
+      streaming: false,
+      pushNotifications: false,
+      stateTransitionHistory: true,
+    },
+    skills: [],
+  };
 };
 
 /**
- * メイン実行関数
+ * メイン実行関数（SDK準拠）
  */
 async function runA2AServer(configPath: string): Promise<void> {
   console.log(`\n=== Starting A2A Server with config: ${configPath} ===`);
@@ -79,67 +132,40 @@ async function runA2AServer(configPath: string): Promise<void> {
     await workflow.build();
     console.log(`Workflow engine built successfully`);
 
-    // グラフの可視化を生成（エラーハンドリング追加）
-    /*
-        try {
-            const pngFileName = getPngFileName(configPath);
-            await workflow.drawGraph(pngFileName);
-            console.log(`Graph visualization saved as: ${pngFileName}`);
-        } catch (error) {
-            const errorMessage =
-                error instanceof Error ? error.message : String(error);
-            console.warn(
-                `⚠️  Graph visualization failed (non-critical): ${errorMessage}`
-            );
-            console.log(`Continuing with server startup...`);
-        }
-        */
-
-    // A2AEndpointの設定
-    const agentName =
-      workflowConfig.config?.a2aEndpoint?.name ||
-      workflowConfig.config?.name ||
-      "WorkflowAgent";
-    const agentDescription =
-      workflowConfig.config?.a2aEndpoint?.description ||
-      workflowConfig.config?.description ||
-      "A workflow agent that processes tasks through multiple steps";
+    // ポート設定
     const port = workflowConfig.config?.a2aEndpoint?.port || 3000;
 
-    console.log(`Agent Name: ${agentName}`);
-    console.log(`Agent Description: ${agentDescription}`);
-    console.log(`Port: ${port}`);
+    // AgentCardを構築（SDK準拠）
+    const agentCard = buildAgentCardFromConfig(workflowConfig, port);
+    console.log(`Agent Card built:`, {
+      name: agentCard.name,
+      description: agentCard.description,
+      protocolVersion: agentCard.protocolVersion,
+      url: agentCard.url,
+      skills: agentCard.skills?.length || 0,
+    });
 
-    // A2AEndpoint作成
-    const a2aEndpoint = new A2AEndpoint({
-      name: agentName,
-      description: agentDescription,
-      agentCard: {
-        name: agentName,
-        description: agentDescription,
-        version: "1.0.0",
-        url: "", // Will be set by the endpoint
-        capabilities: {
-          streaming: false,
-          pushNotifications: false,
-          stateTransitionHistory: true,
-        },
-        skills: [],
-      },
+    // AgentExecutorを作成
+    const agentExecutor = new A2AEndpoint({
+      name: agentCard.name,
+      description: agentCard.description,
+      agentCard: agentCard,
       port: port,
       executor: async (input: string, sessionId?: string): Promise<any> => {
         try {
-          console.log(`Executing workflow with input: ${input}`);
+          console.log(
+            `Executing workflow with input: ${input.substring(0, 100)}...`
+          );
           console.log(`Session ID: ${sessionId || "default"}`);
 
-          // Create a proper configuration with thread_id for LangGraph checkpointing
+          // LangGraph checkpointing用の設定を作成
           const config = {
             configurable: {
               thread_id: sessionId || "default",
             },
           };
 
-          // Execute the workflow with the input and proper configuration
+          // ワークフローを実行
           const result = await workflow.invoke(
             {
               messages: [{ role: "user", content: input }],
@@ -158,24 +184,169 @@ async function runA2AServer(configPath: string): Promise<void> {
       },
     });
 
-    console.log(`\nStarting A2A Endpoint on port ${port}...`);
-    console.log(
-      `Agent discovery endpoint: http://localhost:${port}/.well-known/agent.json`
+    // SDK標準コンポーネントを使用してサーバーを構築
+    const taskStore = new InMemoryTaskStore();
+    const requestHandler = new DefaultRequestHandler(
+      agentCard,
+      taskStore,
+      agentExecutor
     );
-    console.log(`JSON-RPC endpoint: http://localhost:${port}/jsonrpc`);
 
-    // サーバー起動 - 修正: a2aEndpointを使用
-    a2aEndpoint.run(port);
+    // A2AExpressAppを使用してExpressアプリを構築
+    const appBuilder = new A2AExpressApp(requestHandler);
+    const app = express(); // ✅ Create Express app first
 
-    // プロセス終了時のハンドリング
-    process.on("SIGINT", () => {
-      console.log("\n\nReceived SIGINT. Shutting down gracefully...");
-      process.exit(0);
+    // Add basic middleware
+    app.use(express.json());
+    app.use(express.urlencoded({ extended: true }));
+
+    // Add a basic health check endpoint
+    app.get("/", (req, res) => {
+      res.json({
+        name: agentCard.name,
+        status: "running",
+        protocolVersion: agentCard.protocolVersion,
+        endpoints: {
+          agentCard: "/.well-known/agent.json",
+          messageSend: "/message/send",
+          tasks: "/tasks",
+        },
+      });
     });
 
-    process.on("SIGTERM", () => {
-      console.log("\n\nReceived SIGTERM. Shutting down gracefully...");
-      process.exit(0);
+    // Setup A2A routes
+    const configuredApp = appBuilder.setupRoutes(app);
+
+    // Add debug logging for routes
+    console.log("\n📡 Registered routes:");
+    configuredApp._router?.stack?.forEach((layer: any) => {
+      if (layer.route) {
+        console.log(
+          `  ${Object.keys(layer.route.methods).join(", ").toUpperCase()} ${
+            layer.route.path
+          }`
+        );
+      }
+    });
+
+    // Manual A2A endpoint registration (fallback if SDK setup fails)
+    if (
+      !configuredApp._router?.stack?.some(
+        (layer: any) => layer.route?.path === "/.well-known/agent.json"
+      )
+    ) {
+      console.log("⚠️  A2A SDK routes not detected, registering manually...");
+
+      // Agent Card endpoint
+      configuredApp.get("/.well-known/agent.json", (req, res) => {
+        res.json(agentCard);
+      });
+
+      // Message Send endpoint
+      configuredApp.post("/message/send", async (req, res) => {
+        try {
+          const { message, sessionId } = req.body;
+
+          if (!message || !message.parts || message.parts.length === 0) {
+            return res.status(400).json({
+              error: "Invalid message format",
+            });
+          }
+
+          // Extract text from message parts
+          const textContent = message.parts
+            .filter((part: any) => part.kind === "text")
+            .map((part: any) => part.text)
+            .join(" ")
+            .trim();
+
+          if (!textContent) {
+            return res.status(400).json({
+              error: "No text content found in message",
+            });
+          }
+
+          // Execute the workflow directly (use the same executor function)
+          const config = {
+            configurable: {
+              thread_id: sessionId || "default",
+            },
+          };
+
+          const result = await workflow.invoke(
+            {
+              messages: [{ role: "user", content: textContent }],
+            },
+            config
+          );
+
+          // Return response in A2A format
+          res.json({
+            messageId: `msg-${Date.now()}`,
+            parts: [
+              {
+                kind: "text",
+                text:
+                  typeof result === "string"
+                    ? result
+                    : JSON.stringify(result, null, 2),
+              },
+            ],
+          });
+        } catch (error: any) {
+          console.error("Message processing error:", error);
+          res.status(500).json({
+            error: "Internal server error",
+            message: error.message,
+          });
+        }
+      });
+
+      console.log("✅ Manual A2A endpoints registered");
+    }
+
+    // サーバー起動（SDK準拠）
+    const server = configuredApp.listen(port, () => {
+      // ✅ Use configuredApp instead of app
+      console.log(`\n🚀 A2A Server started successfully!`);
+      console.log(`Port: ${port}`);
+      console.log(`Agent Name: ${agentCard.name}`);
+      console.log(`Protocol Version: ${agentCard.protocolVersion}`);
+      console.log(`\n📡 Endpoints:`);
+      console.log(
+        `  Agent Card: http://localhost:${port}/.well-known/agent.json`
+      );
+      console.log(`  Message Send: http://localhost:${port}/message/send`);
+      console.log(`  Task Query: http://localhost:${port}/tasks/{taskId}`);
+      console.log(
+        `  Task Cancel: http://localhost:${port}/tasks/{taskId}/cancel`
+      );
+      console.log(`\n✅ Server is ready to receive A2A requests`);
+    });
+
+    // プロセス終了時のハンドリング
+    const gracefulShutdown = () => {
+      console.log("\n\n🛑 Shutting down gracefully...");
+      server.close(() => {
+        console.log("✅ Server closed successfully");
+        process.exit(0);
+      });
+    };
+
+    process.on("SIGINT", gracefulShutdown);
+    process.on("SIGTERM", gracefulShutdown);
+
+    // エラーハンドリング
+    server.on("error", (error: any) => {
+      if (error.code === "EADDRINUSE") {
+        console.error(`❌ Port ${port} is already in use`);
+        console.error(
+          `Please try a different port or stop the service using port ${port}`
+        );
+      } else {
+        console.error(`❌ Server error:`, error);
+      }
+      process.exit(1);
     });
   } catch (error) {
     console.error(`\n=== Server Startup Error ===`);
@@ -185,6 +356,14 @@ async function runA2AServer(configPath: string): Promise<void> {
 }
 
 /**
+ * JSONファイルパスからPNGファイル名を生成
+ */
+const getPngFileName = (jsonPath: string): string => {
+  const fileName = path.basename(jsonPath, ".json");
+  return `${fileName}.png`;
+};
+
+/**
  * コマンドライン引数の処理
  */
 function parseArguments(): string {
@@ -192,12 +371,14 @@ function parseArguments(): string {
 
   if (args.length === 0) {
     console.error("Usage: yarn server <config-file-path>");
-    console.error("Example: yarn server ./research/main.json");
+    console.error(
+      "Example: yarn server ./json/SceneGraphManager/research/research-execution.json"
+    );
     process.exit(1);
   }
 
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log("A2A Server - Agent-to-Agent Protocol Server");
+    console.log("A2A Server - Agent-to-Agent Protocol Server (SDK Compliant)");
     console.log("");
     console.log("Usage: yarn server <config-file-path>");
     console.log("");
@@ -205,9 +386,22 @@ function parseArguments(): string {
     console.log("  config-file-path    Path to the JSON configuration file");
     console.log("");
     console.log("Examples:");
-    console.log("  yarn server ./research/main.json");
+    console.log(
+      "  yarn server ./json/SceneGraphManager/research/research-execution.json"
+    );
     console.log("  yarn server /absolute/path/to/config.json");
-    console.log("  yarn server research/subagents/task-creation.json");
+    console.log(
+      "  yarn server json/SceneGraphManager/research/task-creation.json"
+    );
+    console.log("");
+    console.log("Features:");
+    console.log("  ✅ A2A Protocol v0.3.0 compliant");
+    console.log(
+      "  ✅ Standard endpoints (/.well-known/agent.json, /message/send, /tasks/*)"
+    );
+    console.log("  ✅ Task lifecycle management");
+    console.log("  ✅ Cancellation support");
+    console.log("  ✅ Express.js integration");
     console.log("");
     console.log(
       "The configuration file should contain a valid WorkflowConfig JSON structure."
