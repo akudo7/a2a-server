@@ -2,16 +2,21 @@
 import path from "path";
 import * as dotenv from "dotenv";
 import express from "express";
-import { WorkflowEngine } from "./SceneGraphManager/lib/index.js";
-import { WorkflowConfig } from "./SceneGraphManager/types/index.js";
 import { readFileSync, existsSync } from "fs";
-import { A2AEndpoint } from "./SceneGraphManager/a2a/A2AEndpoint.js";
 import { fileURLToPath } from "url";
+import { WorkflowEngine, WorkflowConfig  } from "@kudos/scene-graph-manager";
 
 // A2A SDK imports
 import type { AgentCard } from "@a2a-js/sdk";
-import { DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
+import {
+  DefaultRequestHandler,
+  InMemoryTaskStore,
+  type AgentExecutor,
+  type RequestContext,
+  type ExecutionEventBus
+} from "@a2a-js/sdk/server";
 import { A2AExpressApp } from "@a2a-js/sdk/server/express";
+import { Request, Response } from "express";
 
 // ES Module で __filename, __dirname を取得
 const __filename = fileURLToPath(import.meta.url);
@@ -145,30 +150,38 @@ async function runA2AServer(configPath: string): Promise<void> {
       skills: agentCard.skills?.length || 0,
     });
 
-    // AgentExecutorを作成
-    const agentExecutor = new A2AEndpoint({
-      name: agentCard.name,
-      description: agentCard.description,
-      agentCard: agentCard,
-      port: port,
-      executor: async (input: string, sessionId?: string): Promise<any> => {
+    // AgentExecutorを作成（SDK準拠）
+    const agentExecutor: AgentExecutor = {
+      execute: async (
+        requestContext: RequestContext,
+        eventBus: ExecutionEventBus
+      ): Promise<void> => {
         try {
+          // Extract text content from user message
+          const userMessage = requestContext.userMessage;
+          const textContent = userMessage.parts
+            ?.filter((part: any) => part.kind === "text" || part.type === "text")
+            .map((part: any) => part.text)
+            .join(" ")
+            .trim();
+
           console.log(
-            `Executing workflow with input: ${input.substring(0, 100)}...`
+            `Executing workflow with input: ${textContent?.substring(0, 100)}...`
           );
-          console.log(`Session ID: ${sessionId || "default"}`);
+          console.log(`Task ID: ${requestContext.taskId}`);
+          console.log(`Context ID: ${requestContext.contextId}`);
 
           // LangGraph checkpointing用の設定を作成
           const config = {
             configurable: {
-              thread_id: sessionId || "default",
+              thread_id: requestContext.contextId || "default",
             },
           };
 
           // ワークフローを実行
           const result = await workflow.invoke(
             {
-              messages: [{ role: "user", content: input }],
+              messages: [{ role: "user", content: textContent || "" }],
             },
             config
           );
@@ -176,13 +189,67 @@ async function runA2AServer(configPath: string): Promise<void> {
           console.log(`Workflow execution completed`);
           console.log(`Result type: ${typeof result}`);
 
-          return result;
+          // Extract response text from result
+          let responseText: string;
+          if (typeof result === "string") {
+            responseText = result;
+          } else if (result && typeof result === "object") {
+            // Try to extract from common result formats
+            if ("messages" in result && Array.isArray(result.messages)) {
+              const lastMessage = result.messages[result.messages.length - 1];
+              responseText =
+                typeof lastMessage === "string"
+                  ? lastMessage
+                  : lastMessage?.content || JSON.stringify(result, null, 2);
+            } else {
+              responseText = JSON.stringify(result, null, 2);
+            }
+          } else {
+            responseText = String(result);
+          }
+
+          // Publish response as Message event
+          eventBus.publish({
+            kind: "message",
+            role: "agent",
+            messageId: `msg-${Date.now()}`,
+            parts: [
+              {
+                kind: "text",
+                text: responseText,
+              },
+            ],
+          });
+
+          // Signal completion
+          eventBus.finished();
         } catch (error) {
           console.error(`Workflow execution error:`, error);
+          // Publish error and finish
+          eventBus.publish({
+            kind: "message",
+            role: "agent",
+            messageId: `error-${Date.now()}`,
+            parts: [
+              {
+                kind: "text",
+                text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+              },
+            ],
+          });
+          eventBus.finished();
           throw error;
         }
       },
-    });
+      cancelTask: async (
+        taskId: string,
+        eventBus: ExecutionEventBus
+      ): Promise<void> => {
+        console.log(`Task cancellation requested for: ${taskId}`);
+        // Implement cancellation logic here if needed
+        eventBus.finished();
+      },
+    };
 
     // SDK標準コンポーネントを使用してサーバーを構築
     const taskStore = new InMemoryTaskStore();
@@ -238,12 +305,12 @@ async function runA2AServer(configPath: string): Promise<void> {
       console.log("⚠️  A2A SDK routes not detected, registering manually...");
 
       // Agent Card endpoint
-      configuredApp.get("/.well-known/agent.json", (req, res) => {
+      configuredApp.get("/.well-known/agent.json", (req: Request, res: Response) => {
         res.json(agentCard);
       });
 
       // Message Send endpoint
-      configuredApp.post("/message/send", async (req, res) => {
+      configuredApp.post("/message/send", async (req: Request, res: Response) => {
         try {
           const { message, sessionId } = req.body;
 
@@ -255,7 +322,7 @@ async function runA2AServer(configPath: string): Promise<void> {
 
           // Extract text from message parts
           const textContent = message.parts
-            .filter((part: any) => part.kind === "text")
+            .filter((part: any) => part.type === "text" || part.kind === "text")
             .map((part: any) => part.text)
             .join(" ")
             .trim();
