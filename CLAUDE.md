@@ -52,7 +52,10 @@ yarn server --help
 
 ### Request Flow
 
+The server supports **dual protocol access** for maximum compatibility:
+
 ```
+HTTP REST API:
 A2A Client → Express Routes → DefaultRequestHandler → A2AEndpoint
                                                            ↓
                                                     WorkflowEngine.invoke()
@@ -62,14 +65,26 @@ A2A Client → Express Routes → DefaultRequestHandler → A2AEndpoint
                                     Nodes (FunctionNodes + ToolNodes)
                                                            ↓
                               Models (OpenAI/Anthropic/Ollama) + Tools (MCP + A2A)
+
+JSON-RPC 2.0:
+JSON-RPC Client → POST / → AgentExecutor → WorkflowEngine.invoke() → Result
 ```
 
 ### Core Components
 
 #### 1. Server Layer ([server.ts](src/server.ts))
 
-- Implements A2A Protocol v0.3.0 compliant endpoints
-- Standard endpoints: `/.well-known/agent.json`, `/message/send`, `/tasks/{taskId}`, `/tasks/{taskId}/cancel`
+- **Dual Protocol Support**: HTTP REST API + JSON-RPC 2.0
+- **HTTP REST API**: A2A Protocol v0.3.0 compliant endpoints
+  - `GET /.well-known/agent.json` - Agent card information
+  - `POST /message/send` - Send message to agent
+  - `GET /tasks/{taskId}` - Query task status
+  - `POST /tasks/{taskId}/cancel` - Cancel running task
+  - `GET /health` - Server health check
+- **JSON-RPC 2.0**: Standard protocol used by Claude Desktop and A2A SDK
+  - `POST /` - JSON-RPC endpoint
+  - Methods: `message/send`, `agent/getAuthenticatedExtendedCard`
+  - Error codes: -32601 (method not found), -32602 (invalid params), -32603 (internal error)
 - Uses A2A SDK's `DefaultRequestHandler` and `A2AExpressApp` for protocol compliance
 - Builds `AgentCard` from WorkflowConfig's `a2aEndpoint` configuration
 - Wraps WorkflowEngine in A2AEndpoint executor
@@ -84,13 +99,19 @@ The WorkflowEngine is a symlinked module (`src/SceneGraphManager -> ../../kudos-
 - Configures MCP servers and A2A clients
 - Executes workflows with checkpointing and recursion limits
 
-#### 3. A2AEndpoint
+#### 3. A2AEndpoint & SimpleExecutionEventBus
 
-- Implements `AgentExecutor` interface from A2A SDK
-- Manages task lifecycle: `submitted` → `working` → `completed`/`failed`/`canceled`
-- Publishes events to `ExecutionEventBus` for streaming support
-- Handles cancellation requests by tracking task IDs
-- Extracts results from various formats (direct messages, tasks, artifacts)
+- **AgentExecutor**: Implements `AgentExecutor` interface from A2A SDK
+  - Manages task lifecycle: `submitted` → `working` → `completed`/`failed`/`canceled`
+  - Handles cancellation requests by tracking task IDs
+  - Extracts results from various formats (direct messages, tasks, artifacts)
+- **SimpleExecutionEventBus**: Custom event bus implementation (lines 30-56)
+  - Extends EventEmitter to implement `ExecutionEventBus` interface
+  - Collects response text from agent messages during workflow execution
+  - Provides `publish()` method to collect responses
+  - Provides `finished()` method to signal workflow completion
+  - Provides `getResponse()` method to retrieve collected text
+  - Used for JSON-RPC synchronous response collection
 
 #### 4. ModelFactoryManager
 
@@ -210,17 +231,43 @@ Workflow configurations are JSON files with this structure:
 - **JSX**: React JSX (for potential Ink CLI components)
 - **Strict mode**: Enabled
 
-## A2A Protocol Details
+## Protocol Details
 
-### Server Endpoints
+### Dual Protocol Support
 
-The server automatically exposes these A2A Protocol v0.3.0 endpoints:
+The server supports **two protocols** for maximum compatibility:
+
+#### 1. HTTP REST API (A2A Protocol v0.3.0)
+
+Standard A2A Protocol endpoints:
 
 - `GET /.well-known/agent.json` - Returns AgentCard with capabilities, skills, version
 - `POST /message/send` - Send message, returns Task or direct Message
 - `GET /tasks/{taskId}` - Query task status and artifacts
 - `POST /tasks/{taskId}/cancel` - Cancel running task
 - `GET /tasks/{taskId}/stream` - SSE stream for task updates (if streaming enabled)
+- `GET /health` - Health check with uptime and endpoint information
+
+#### 2. JSON-RPC 2.0 (Claude Desktop & A2A SDK)
+
+JSON-RPC endpoint at root path:
+
+- `POST /` - JSON-RPC 2.0 endpoint
+
+Supported methods:
+
+- `message/send` - Send message to agent and execute workflow
+  - Params: `{ message: Message, contextId?: string }`
+  - Returns: `{ taskId: string, result: string, thread_id: string }`
+- `agent/getAuthenticatedExtendedCard` - Get agent card information
+  - Params: `{}`
+  - Returns: `AgentCard`
+
+Standard JSON-RPC error codes:
+
+- `-32601` - Method not found
+- `-32602` - Invalid params
+- `-32603` - Internal error
 
 ### AgentCard Configuration
 
@@ -252,6 +299,151 @@ When workflows need to call other agents:
 2. Bind clients to models via `bindA2AClients` array
 3. A2AToolGenerator wraps clients as LangChain tools
 4. Use tools in FunctionNodes: `await send_message_to_agentName("user message")`
+
+## Testing
+
+### Testing with JSON-RPC
+
+The server supports JSON-RPC 2.0 for testing workflows. Here's how to test a workflow configuration:
+
+#### 1. Start the Server
+
+```bash
+cd /Users/akirakudo/Desktop/MyWork/CLI/server
+yarn server json/SceneGraphManager/research/task-creation.json
+```
+
+Or use a predefined script:
+
+```bash
+yarn server:task    # Task creation workflow
+yarn server:main    # Main research workflow
+```
+
+#### 2. Send JSON-RPC Request with curl
+
+```bash
+curl -X POST http://localhost:3001/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "message/send",
+    "params": {
+      "message": {
+        "parts": [
+          {
+            "kind": "text",
+            "text": "矢崎総業の会社概要、製品サービス、強み弱み、中期戦略、AIの取り組みについて調査してください。"
+          }
+        ]
+      },
+      "contextId": "test-session-001"
+    }
+  }'
+```
+
+#### 3. Expected Response
+
+Success response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "taskId": "task-1234567890-abc123def",
+    "result": "調査結果のテキスト...",
+    "thread_id": "test-session-001"
+  }
+}
+```
+
+Error response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32603,
+    "message": "エラーメッセージ"
+  }
+}
+```
+
+#### 4. Other Test Commands
+
+Get agent card:
+
+```bash
+curl -X POST http://localhost:3001/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "agent/getAuthenticatedExtendedCard",
+    "params": {}
+  }'
+```
+
+Health check (REST API):
+
+```bash
+curl http://localhost:3001/health
+```
+
+Agent card (REST API):
+
+```bash
+curl http://localhost:3001/.well-known/agent.json
+```
+
+#### 5. Pretty Print with jq
+
+If you have `jq` installed, you can format the output:
+
+```bash
+curl -X POST http://localhost:3001/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "message/send",
+    "params": {
+      "message": {
+        "parts": [
+          {
+            "kind": "text",
+            "text": "矢崎総業について調査してください"
+          }
+        ]
+      },
+      "contextId": "test-session-001"
+    }
+  }' | jq '.'
+```
+
+### Testing with HTTP REST API
+
+You can also test using the A2A Protocol HTTP endpoints:
+
+```bash
+# Send a message
+curl -X POST http://localhost:3001/message/send \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": {
+      "parts": [
+        {
+          "kind": "text",
+          "text": "研究課題について調査してください"
+        }
+      ]
+    },
+    "sessionId": "test-session-001"
+  }'
+```
 
 ## Development Patterns
 

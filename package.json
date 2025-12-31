@@ -11,10 +11,10 @@
 		"start": "node dist/index.js",
 		"server": "node dist/server.js",
 		"server:dev": "tsx src/server.ts",
-		"server:task": "node dist/server.js ./json/research/subagents/task-creation.json",
-		"server:research": "node dist/server.js ./json/research/subagents/research-execution.json",
-		"server:quality": "node dist/server.js ./json/research/subagents/quality-evaluation.json",
-		"server:main": "node dist/server.js ./json/research/main.json"
+		"server:task": "node dist/server.js ./json/a2a/servers/task-creation.json",
+		"server:research": "node dist/server.js ./json/a2a/servers/research-execution.json",
+		"server:quality": "node dist/server.js ./json/a2a/servers/quality-evaluation.json",
+		"server:main": "node dist/server.js ./json/a2a/main.json"
 	},
 	"keywords": [],
 	"author": "",

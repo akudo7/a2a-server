@@ -4,6 +4,7 @@ import * as dotenv from "dotenv";
 import express from "express";
 import { readFileSync, existsSync } from "fs";
 import { fileURLToPath } from "url";
+import { EventEmitter } from "events";
 import { WorkflowEngine, WorkflowConfig  } from "@kudos/scene-graph-manager";
 
 // A2A SDK imports
@@ -25,6 +26,34 @@ const __dirname = path.dirname(__filename);
 // 環境変数の読み込み
 const envPath = path.join(process.cwd(), ".env");
 dotenv.config({ path: envPath });
+
+/**
+ * Simple ExecutionEventBus implementation for JSON-RPC
+ */
+class SimpleExecutionEventBus extends EventEmitter implements ExecutionEventBus {
+  private responseText = "";
+
+  publish(event: any): void {
+    if (event.kind === "message" && event.role === "agent") {
+      const textParts = event.parts?.filter(
+        (p: any) => p.kind === "text" || p.type === "text"
+      );
+      if (textParts && textParts.length > 0) {
+        this.responseText += textParts.map((p: any) => p.text).join(" ");
+      }
+    }
+    // Emit the event for listeners
+    this.emit("event", event);
+  }
+
+  finished(): void {
+    this.emit("finished");
+  }
+
+  getResponse(): string {
+    return this.responseText;
+  }
+}
 
 // デバッグモードを有効化
 process.env.DEBUG = process.env.DEBUG || "false";
@@ -268,17 +297,98 @@ async function runA2AServer(configPath: string): Promise<void> {
     app.use(express.urlencoded({ extended: true }));
 
     // Add a basic health check endpoint
-    app.get("/", (req, res) => {
+    app.get("/health", (req, res) => {
       res.json({
         name: agentCard.name,
         status: "running",
         protocolVersion: agentCard.protocolVersion,
+        uptime: process.uptime(),
         endpoints: {
           agentCard: "/.well-known/agent.json",
           messageSend: "/message/send",
           tasks: "/tasks",
         },
       });
+    });
+
+    // JSON-RPC 2.0 endpoint (used by A2A SDK and Claude Desktop)
+    app.post("/", async (req: Request, res: Response) => {
+      const { id, method, params } = req.body as any;
+
+      console.log(`[JSON-RPC] Received request: method=${method}, id=${id}`);
+
+      try {
+        // Handle JSON-RPC methods
+        if (method === "message/send") {
+          // Generate unique task ID
+          const taskId = `task-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+          console.log(`[JSON-RPC message/send] Creating task ${taskId}`);
+
+          // Extract message from params
+          const message = params?.message;
+          if (!message) {
+            return res.json({
+              jsonrpc: "2.0",
+              id,
+              error: {
+                code: -32602,
+                message: "Invalid params: message is required",
+              },
+            });
+          }
+
+          // Create a simple request context for the executor
+          const requestContext: RequestContext = {
+            taskId,
+            contextId: params?.contextId || taskId,
+            userMessage: message,
+          };
+
+          // Create a simple event bus that collects responses
+          const eventBus = new SimpleExecutionEventBus();
+
+          // Execute the workflow
+          await agentExecutor.execute(requestContext, eventBus);
+
+          // Return JSON-RPC response
+          return res.json({
+            jsonrpc: "2.0",
+            id,
+            result: {
+              taskId,
+              result: eventBus.getResponse(),
+              thread_id: requestContext.contextId,
+            },
+          });
+        } else if (method === "agent/getAuthenticatedExtendedCard") {
+          // Return agent card
+          return res.json({
+            jsonrpc: "2.0",
+            id,
+            result: agentCard,
+          });
+        } else {
+          // Unsupported method
+          return res.json({
+            jsonrpc: "2.0",
+            id,
+            error: {
+              code: -32601,
+              message: `Method not found: ${method}`,
+            },
+          });
+        }
+      } catch (error: any) {
+        console.error(`[JSON-RPC] Error:`, error);
+        return res.json({
+          jsonrpc: "2.0",
+          id,
+          error: {
+            code: -32603,
+            message: error.message || "Internal error",
+          },
+        });
+      }
     });
 
     // Setup A2A routes
@@ -381,6 +491,9 @@ async function runA2AServer(configPath: string): Promise<void> {
       console.log(`Protocol Version: ${agentCard.protocolVersion}`);
       console.log(`\n📡 Endpoints:`);
       console.log(
+        `  JSON-RPC: http://localhost:${port}/ (POST)`
+      );
+      console.log(
         `  Agent Card: http://localhost:${port}/.well-known/agent.json`
       );
       console.log(`  Message Send: http://localhost:${port}/message/send`);
@@ -388,7 +501,8 @@ async function runA2AServer(configPath: string): Promise<void> {
       console.log(
         `  Task Cancel: http://localhost:${port}/tasks/{taskId}/cancel`
       );
-      console.log(`\n✅ Server is ready to receive A2A requests`);
+      console.log(`  Health Check: http://localhost:${port}/health`);
+      console.log(`\n✅ Server is ready to receive A2A requests (HTTP & JSON-RPC)`);
     });
 
     // プロセス終了時のハンドリング
