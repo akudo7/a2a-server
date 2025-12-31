@@ -58,3 +58,6 @@ credentials.json
 .kudosflow/json
 json
 src/SceneGraphManager
+
+# Claude Code configuration
+.claude/
