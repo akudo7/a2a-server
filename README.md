@@ -124,6 +124,7 @@ curl -X POST http://localhost:3001/ \
     "method": "message/send",
     "params": {
       "message": {
+        "messageId": "msg-test-001",
         "parts": [
           {
             "kind": "text",
@@ -382,6 +383,7 @@ Send a message to the agent and execute the workflow.
   "method": "message/send",
   "params": {
     "message": {
+      "messageId": "msg-unique-id",
       "parts": [
         {
           "kind": "text",

@@ -331,6 +331,7 @@ curl -X POST http://localhost:3001/ \
     "method": "message/send",
     "params": {
       "message": {
+        "messageId": "msg-test-001",
         "parts": [
           {
             "kind": "text",
@@ -412,6 +413,7 @@ curl -X POST http://localhost:3001/ \
     "method": "message/send",
     "params": {
       "message": {
+        "messageId": "msg-test-002",
         "parts": [
           {
             "kind": "text",
