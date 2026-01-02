@@ -24,6 +24,7 @@
 		"@kudos/scene-graph-manager": "file:/Users/akirakudo/Desktop/MyWork/TypeScript/SceneGraphManager",
 		"abort-controller": "^3.0.0",
 		"dotenv": "^17.2.1",
+		"express": "^5.2.1",
 		"formdata-node": "^6.0.3",
 		"node-fetch": "^3.3.2",
 		"web-streams-polyfill": "^4.2.0"
