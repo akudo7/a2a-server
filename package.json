@@ -1,5 +1,5 @@
 {
-	"name": "kudos-cli",
+	"name": "a2a-server",
 	"version": "1.0.0",
 	"description": "",
 	"main": "dist/index.js",
@@ -14,7 +14,12 @@
 		"server:task": "node dist/server.js ./json/a2a/servers/task-creation.json",
 		"server:research": "node dist/server.js ./json/a2a/servers/research-execution.json",
 		"server:quality": "node dist/server.js ./json/a2a/servers/quality-evaluation.json",
-		"server:main": "node dist/server.js ./json/a2a/main.json"
+		"server:main": "node dist/server.js ./json/a2a/main.json",
+		"audit": "yarn audit",
+		"audit:fix": "yarn audit --fix",
+		"audit:report": "yarn audit --json > audit-report.json",
+		"security:check": "yarn audit && yarn outdated",
+		"security:full": "yarn audit --audit-level=moderate && yarn outdated --depth=0"
 	},
 	"keywords": [],
 	"author": "",
@@ -31,7 +36,7 @@
 	},
 	"devDependencies": {
 		"@types/express": "^5.0.3",
-		"@types/node": "^24.2.0",
+		"@types/node": "^25.0.3",
 		"tsx": "^4.20.3",
 		"typescript": "^5.9.2"
 	}
