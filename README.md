@@ -504,7 +504,19 @@ This server is part of the larger kudos-cli ecosystem:
 
 ## License
 
-[Your License Here]
+MIT License - see [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2026 Akira Kudo
+
+**Third-Party Components:**
+
+This project includes the kudos-scene-graph-manager component, which has separate licensing terms:
+
+- Free for use within the kudosflow project only
+- Commercial use outside of kudosflow requires a separate license
+- For licensing inquiries, contact: [Akira Kudo](https://www.linkedin.com/in/akira-kudo-4b04163/)
+
+See the [LICENSE](LICENSE) file for complete details.
 
 ## Support
 
