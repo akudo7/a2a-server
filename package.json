@@ -1,43 +1,46 @@
 {
-	"name": "a2a-server",
-	"version": "1.0.0",
-	"description": "",
-	"main": "dist/index.js",
-	"type": "module",
-	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1",
-		"dev": "tsx src/index.tsx",
-		"build": "tsc",
-		"start": "node dist/index.js",
-		"server": "node dist/server.js",
-		"server:dev": "tsx src/server.ts",
-		"server:task": "node dist/server.js ./json/a2a/servers/task-creation.json",
-		"server:research": "node dist/server.js ./json/a2a/servers/research-execution.json",
-		"server:quality": "node dist/server.js ./json/a2a/servers/quality-evaluation.json",
-		"server:main": "node dist/server.js ./json/a2a/main.json",
-		"audit": "yarn audit",
-		"audit:fix": "yarn audit --fix",
-		"audit:report": "yarn audit --json > audit-report.json",
-		"security:check": "yarn audit && yarn outdated",
-		"security:full": "yarn audit --audit-level=moderate && yarn outdated --depth=0"
-	},
-	"keywords": [],
-	"author": "",
-	"license": "ISC",
-	"dependencies": {
-		"@a2a-js/sdk": "^0.3.7",
-		"@kudos/scene-graph-manager": "file:/Users/akirakudo/Desktop/MyWork/TypeScript/SceneGraphManager/kudos-scene-graph-manager-2.0.0.tgz",
-		"abort-controller": "^3.0.0",
-		"dotenv": "^17.2.1",
-		"express": "^5.2.1",
-		"formdata-node": "^6.0.3",
-		"node-fetch": "^3.3.2",
-		"web-streams-polyfill": "^4.2.0"
-	},
-	"devDependencies": {
-		"@types/express": "^5.0.3",
-		"@types/node": "^25.0.3",
-		"tsx": "^4.20.3",
-		"typescript": "^5.9.2"
-	}
+  "name": "a2a-server",
+  "version": "1.0.0",
+  "description": "A sample implementation of an A2A server using scene-graph-manager",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsx src/index.tsx",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "server": "node dist/server.js",
+    "server:dev": "tsx src/server.ts",
+    "server:task": "node dist/server.js ./json/a2a/servers/task-creation.json",
+    "server:research": "node dist/server.js ./json/a2a/servers/research-execution.json",
+    "server:quality": "node dist/server.js ./json/a2a/servers/quality-evaluation.json",
+    "server:main": "node dist/server.js ./json/a2a/main.json",
+    "audit": "yarn audit",
+    "audit:fix": "yarn audit --fix",
+    "audit:report": "yarn audit --json > audit-report.json",
+    "security:check": "yarn audit && yarn outdated",
+    "security:full": "yarn audit --audit-level=moderate && yarn outdated --depth=0"
+  },
+  "keywords": [],
+  "license": "MIT",
+  "author": {
+    "name": "Akira Kudo",
+    "url": "https://www.linkedin.com/in/akira-kudo-4b04163/"
+  },
+  "dependencies": {
+    "@a2a-js/sdk": "^0.3.7",
+    "@kudos/scene-graph-manager": "file:/Users/akirakudo/Desktop/MyWork/TypeScript/SceneGraphManager/kudos-scene-graph-manager-2.0.0.tgz",
+    "abort-controller": "^3.0.0",
+    "dotenv": "^17.2.1",
+    "express": "^5.2.1",
+    "formdata-node": "^6.0.3",
+    "node-fetch": "^3.3.2",
+    "web-streams-polyfill": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^25.0.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  }
 }
