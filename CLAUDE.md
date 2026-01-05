@@ -13,6 +13,17 @@ This is an **A2A (Agent-to-Agent) Protocol Server** that implements Google's A2A
 - **A2A Protocol**: Enables agents to communicate and collaborate through standard REST endpoints
 - **Multi-Agent Workflows**: Workflows can invoke other A2A agents via A2AClient tools injected into the graph
 
+## Package Manager
+
+**IMPORTANT: This project uses Yarn, NOT npm.** Always use `yarn` commands instead of `npm`.
+
+- ✅ `yarn install` (NOT `npm install`)
+- ✅ `yarn build` (NOT `npm run build`)
+- ✅ `yarn add <package>` (NOT `npm install <package>`)
+- ✅ `yarn remove <package>` (NOT `npm uninstall <package>`)
+
+The presence of [yarn.lock](yarn.lock) file confirms this project uses Yarn for dependency management.
+
 ## Development Commands
 
 ### Build & Run
