@@ -1,6 +1,6 @@
 # A2A Protocol Server
 
-A production-ready **Agent-to-Agent (A2A) Protocol Server** that implements Google's A2A Protocol v0.3.0 with dual protocol support (HTTP REST + JSON-RPC 2.0). Built on top of **SceneGraphManager**, a JSON-driven AI workflow engine that executes LangChain-based workflows from declarative configuration files.
+A production-ready **Agent-to-Agent (A2A) Protocol Server** that implements Google's A2A Protocol v0.3.0 with dual protocol support (HTTP REST + JSON-RPC 2.0). Built on top of **SceneGraphManager v2.0.0** (private package), a JSON-driven AI workflow engine that executes LangChain-based workflows from declarative configuration files.
 
 ## Features
 
@@ -29,18 +29,19 @@ A production-ready **Agent-to-Agent (A2A) Protocol Server** that implements Goog
 
 ### Prerequisites
 
-- Node.js 18+
-- Yarn or npm
+- Node.js 22+
+- Yarn (this project uses Yarn, not npm)
 - API keys for LLM providers (OpenAI, Anthropic, etc.)
+- SceneGraphManager v2.0.0 package (included via local tarball)
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd server
+git clone https://github.com/akudo7/a2a-server.git
+cd a2a-server
 
-# Install dependencies
+# Install dependencies (Yarn required)
 yarn install
 
 # Configure environment variables
@@ -52,7 +53,7 @@ cp .env.example .env
 
 ```bash
 # Run with a workflow configuration
-yarn server json/SceneGraphManager/research/task-creation.json
+yarn server json/a2a/servers/task-creation.json
 
 # Or use predefined scripts
 yarn server:main           # Main research workflow
@@ -61,7 +62,7 @@ yarn server:research       # Research execution subagent
 yarn server:quality        # Quality evaluation subagent
 
 # Development mode with hot reload
-yarn server:dev json/path/to/config.json
+yarn server:dev json/a2a/servers/task-creation.json
 
 # Show help
 yarn server --help
@@ -128,7 +129,7 @@ curl -X POST http://localhost:3001/ \
         "parts": [
           {
             "kind": "text",
-            "text": "矢崎総業の会社概要について調査してください"
+            "text": "Please research Google's company overview"
           }
         ]
       },
@@ -145,7 +146,7 @@ Expected response:
   "id": 1,
   "result": {
     "taskId": "task-1234567890-abc123def",
-    "result": "調査結果のテキスト...",
+    "result": "Research results text...",
     "thread_id": "test-session-001"
   }
 }
@@ -165,7 +166,7 @@ curl -X POST http://localhost:3001/message/send \
       "parts": [
         {
           "kind": "text",
-          "text": "研究課題について調査してください"
+          "text": "Please research the given topic"
         }
       ]
     },
@@ -204,9 +205,6 @@ AZURE_OPENAI_API_INSTANCE_NAME=...
 AZURE_OPENAI_API_DEPLOYMENT_NAME=...
 AZURE_OPENAI_API_VERSION=...
 
-# Google (optional)
-GOOGLE_API_KEY=...
-
 # Tavily (for web search)
 TAVILY_API_KEY=...
 
@@ -216,71 +214,92 @@ LANGCHAIN_VERBOSE=false
 
 ### Workflow Configuration
 
-Workflows are defined in JSON files with this structure:
+Workflows are defined in JSON files. For detailed JSON workflow file format specification and examples, please refer to **[OpenAgentJson](https://github.com/akudo7/OpenAgentJson)** documentation.
+
+**Quick Example:**
 
 ```json
 {
-  "stateAnnotation": {
-    "name": "ResearchState",
-    "type": "Annotation.Root"
-  },
-  "annotation": {
-    "messages": {
-      "type": "array",
-      "reducer": "addMessages",
-      "default": []
-    }
-  },
   "config": {
-    "name": "ResearchAgent",
-    "description": "An agent that performs research tasks",
-    "recursionLimit": 50,
+    "recursionLimit": 100,
     "a2aEndpoint": {
       "port": 3001,
-      "name": "ResearchAgent",
-      "description": "Research workflow agent"
+      "agentCard": {
+        "name": "TaskCreationAgent",
+        "description": "Task creation agent for research planning",
+        "supportedMessageFormats": ["text/plain", "application/json"]
+      }
     }
   },
   "models": [
     {
-      "id": "main",
-      "type": "anthropic",
+      "id": "taskModel",
+      "type": "OpenAI",
       "config": {
-        "model": "claude-3-5-sonnet-20241022",
+        "model": "gpt-4o-mini",
         "temperature": 0.7
       },
-      "bindMcpServers": ["brave-search"],
-      "bindA2AClients": ["task-creator"]
+      "systemPrompt": "You are an agent specialized in creating market research tasks..."
     }
   ],
+  "stateAnnotation": {
+    "name": "AgentState",
+    "type": "Annotation.Root"
+  },
+  "annotation": {
+    "messages": {
+      "type": "BaseMessage[]",
+      "reducer": "(x, y) => x.concat(y)",
+      "default": []
+    },
+    "taskList": {
+      "type": "any[]",
+      "reducer": "(x, y) => y",
+      "default": []
+    }
+  },
   "nodes": [
     {
-      "id": "research",
-      "function": {
-        "parameters": ["state", "model"],
-        "output": "messages",
-        "implementation": "// Node implementation..."
+      "id": "task_creator",
+      "handler": {
+        "parameters": [
+          {
+            "name": "state",
+            "parameterType": "state",
+            "stateType": "typeof AgentState.State"
+          },
+          {
+            "name": "model",
+            "parameterType": "model",
+            "modelRef": "taskModel"
+          }
+        ],
+        "function": "// Node implementation..."
       }
     }
   ],
   "edges": [
-    { "from": "START", "to": "research", "type": "normal" },
-    { "from": "research", "to": "END", "type": "normal" }
+    { "from": "__start__", "to": "task_creator" },
+    { "from": "task_creator", "to": "__end__" }
   ],
-  "mcpServers": {
-    "brave-search": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"]
-    }
-  },
-  "a2aClients": {
-    "task-creator": {
-      "cardUrl": "http://localhost:3002/.well-known/agent.json",
-      "timeout": 30000
+  "stateGraph": {
+    "annotationRef": "AgentState",
+    "config": {
+      "checkpointer": {
+        "type": "MemorySaver"
+      }
     }
   }
 }
 ```
+
+**Full examples available in:** [kudosflow](https://github.com/akudo7/kudosflow) repository
+
+- [task-creation.json](https://github.com/akudo7/kudosflow/blob/main/json/research/task-creation.json) - Task creation agent
+- [research-execution.json](https://github.com/akudo7/kudosflow/blob/main/json/research/research-execution.json) - Research execution agent
+- [quality-evaluation.json](https://github.com/akudo7/kudosflow/blob/main/json/research/quality-evaluation.json) - Quality evaluation agent
+
+**For complete documentation**, see [OpenAgentJson](https://github.com/akudo7/OpenAgentJson).
 
 ## Key Components
 
@@ -292,15 +311,17 @@ Workflows are defined in JSON files with this structure:
 - **DefaultRequestHandler**: A2A SDK's standard request handler
 - **InMemoryTaskStore**: Task state management
 
-### WorkflowEngine (SceneGraphManager)
+### WorkflowEngine (SceneGraphManager v2.0.0)
 
-The workflow engine is a symlinked module that:
+The workflow engine uses **SceneGraphManager v2.0.0** (private package):
 
 - Loads and validates JSON workflow configurations
 - Builds LangGraph state machines
 - Manages model initialization (OpenAI, Anthropic, Ollama)
 - Configures MCP servers and A2A clients
 - Executes workflows with checkpointing
+
+**Learn more**: See [OpenAgentJson](https://github.com/akudo7/OpenAgentJson) for JSON workflow file format documentation
 
 ### Multi-Agent Communication
 
@@ -315,16 +336,13 @@ Workflows can communicate with other A2A agents:
 ### Project Structure
 
 ```text
-server/
+a2a-server/
 ├── src/
-│   ├── server.ts              # Main server implementation
-│   └── SceneGraphManager/     # Symlinked workflow engine
-├── json/                      # Workflow configuration files (symlinked)
-├── dist/                      # Compiled JavaScript
-├── .env                       # Environment variables (not committed)
+│   └── server.ts             # Main server implementation
+├── .env.example              # Environment variables example
 ├── package.json              # Dependencies and scripts
 ├── tsconfig.json             # TypeScript configuration
-├── CLAUDE.md                 # Detailed developer guide
+├── LICENSE                   # MIT License
 └── README.md                 # This file
 ```
 
@@ -353,18 +371,36 @@ node dist/server.js <config-file>
 
 ### Debugging
 
-Enable verbose logging:
+For comprehensive debugging guidance, see the [JSON Workflow Debugging Guide](json-workflow-debugging.md).
+
+Quick debugging tips:
 
 ```bash
-# Set environment variable
+# Enable verbose logging
 export DEBUG=true
+export LANGCHAIN_VERBOSE=true
 
 # Or in .env file
 DEBUG=true
 LANGCHAIN_VERBOSE=true
+
+# Monitor logs in real-time
+tail -f /tmp/workflow.log
+
+# Check specific node execution
+grep "NodeName" /tmp/workflow.log
 ```
 
-Check server logs for detailed execution traces.
+The debugging guide covers:
+
+- Basic debugging workflow and log monitoring
+- Common issues and solutions (server won't start, tools not executing, infinite loops)
+- Adding console.log statements to workflow nodes
+- Debugging conditional routing and tool execution
+- Testing with JSON-RPC 2.0 format
+- Supporting multiple input formats
+
+For detailed examples and troubleshooting, refer to [json-workflow-debugging.md](json-workflow-debugging.md).
 
 ## API Reference
 
@@ -374,7 +410,7 @@ Check server logs for detailed execution traces.
 
 Send a message to the agent and execute the workflow.
 
-**Request:**
+**Request Format:**
 
 ```json
 {
@@ -396,6 +432,30 @@ Send a message to the agent and execute the workflow.
 }
 ```
 
+**Example using curl:**
+
+```bash
+curl -X POST http://localhost:3001/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "msg-001",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Please research Google company overview"
+          }
+        ]
+      },
+      "contextId": "session-001"
+    }
+  }'
+```
+
 **Response:**
 
 ```json
@@ -414,7 +474,7 @@ Send a message to the agent and execute the workflow.
 
 Get agent card information.
 
-**Request:**
+**Request Format:**
 
 ```json
 {
@@ -423,6 +483,19 @@ Get agent card information.
   "method": "agent/getAuthenticatedExtendedCard",
   "params": {}
 }
+```
+
+**Example using curl:**
+
+```bash
+curl -X POST http://localhost:3001/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "agent/getAuthenticatedExtendedCard",
+    "params": {}
+  }'
 ```
 
 **Response:**
@@ -486,21 +559,25 @@ Ensure all required API keys are set in `.env` file.
 
 Validate JSON configuration files for syntax errors and required fields.
 
-## Related Documentation
+## Documentation & Resources
 
-- **[CLAUDE.md](CLAUDE.md)** - Detailed developer guide
+- **[OpenAgentJson](https://github.com/akudo7/OpenAgentJson)** - JSON workflow file format documentation and examples
+- **[kudosflow](https://github.com/akudo7/kudosflow)** - Complete multi-agent research system sample
 - **[A2A Protocol Spec](https://google-a2a.github.io/A2A)** - Official protocol documentation
-- **[LangGraph](https://langchain-ai.github.io/langgraph/)** - Workflow engine documentation
+- **[LangGraph](https://langchain-ai.github.io/langgraph/)** - Workflow orchestration framework
 - **[A2A SDK](https://github.com/google/a2a-sdk)** - A2A JavaScript SDK
+
+## Related Projects
+
+This server is part of a larger AI agent ecosystem:
+
+- **SceneGraphManager v2.0.0** - Core JSON workflow engine (private package)
+- **[OpenAgentJson](https://github.com/akudo7/OpenAgentJson)** - JSON workflow file format documentation
+- **[kudosflow](https://github.com/akudo7/kudosflow)** - Complete multi-agent research system
 
 ## Contributing
 
-This server is part of the larger kudos-cli ecosystem:
-
-- Parent project: `../../kudos-cli/`
-- Shared SceneGraphManager library
-- Shared workflow configurations
-- Multiple coordinated agents
+Contributions are welcome! Please feel free to submit issues or pull requests.
 
 ## License
 
@@ -510,10 +587,10 @@ Copyright (c) 2026 Akira Kudo
 
 **Third-Party Components:**
 
-This project includes the kudos-scene-graph-manager component, which has separate licensing terms:
+This project includes the SceneGraphManager v2.0.0 component (private package), which has separate licensing terms:
 
-- Free for use within the kudosflow project only
-- Commercial use outside of kudosflow requires a separate license
+- Free for use within this a2a-server project
+- Commercial use outside of this project requires a separate license
 - For licensing inquiries, contact: [Akira Kudo](https://www.linkedin.com/in/akira-kudo-4b04163/)
 
 See the [LICENSE](LICENSE) file for complete details.
@@ -522,10 +599,12 @@ See the [LICENSE](LICENSE) file for complete details.
 
 For issues and questions:
 
-- Check [CLAUDE.md](CLAUDE.md) for detailed documentation
+- Review [OpenAgentJson documentation](https://github.com/akudo7/OpenAgentJson) for JSON workflow file format specification
+- Check [kudosflow sample](https://github.com/akudo7/kudosflow) for multi-agent system examples
 - Review server logs for error details
 - Verify environment variables and configuration files
 - Test with simple workflows first
+- Submit issues on [GitHub](https://github.com/akudo7/a2a-server/issues)
 
 ---
 

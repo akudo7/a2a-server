@@ -61,3 +61,7 @@ src/SceneGraphManager
 
 # Claude Code configuration
 .claude/
+
+# Documentation for AI assistants (not needed in git)
+CLAUDE.md
+a2a_readme.md

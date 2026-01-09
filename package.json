@@ -1,9 +1,17 @@
 {
   "name": "a2a-server",
   "version": "1.0.0",
-  "description": "A sample implementation of an A2A server using scene-graph-manager",
-  "main": "dist/index.js",
+  "description": "Production-ready A2A Protocol Server with dual protocol support (HTTP REST + JSON-RPC 2.0), built on SceneGraphManager v2.0.0",
+  "main": "dist/server.js",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akudo7/a2a-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/akudo7/a2a-server/issues"
+  },
+  "homepage": "https://github.com/akudo7/a2a-server#readme",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "tsx src/index.tsx",
@@ -21,12 +29,29 @@
     "security:check": "yarn audit && yarn outdated",
     "security:full": "yarn audit --audit-level=moderate && yarn outdated --depth=0"
   },
-  "keywords": [],
+  "keywords": [
+    "a2a",
+    "agent",
+    "ai",
+    "langchain",
+    "langgraph",
+    "workflow",
+    "json",
+    "multi-agent",
+    "mcp",
+    "anthropic",
+    "openai"
+  ],
   "license": "MIT",
   "author": {
     "name": "Akira Kudo",
+    "email": "akudo7@gmail.com",
     "url": "https://www.linkedin.com/in/akira-kudo-4b04163/"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "yarn@1.22.0",
   "dependencies": {
     "@a2a-js/sdk": "^0.3.7",
     "@kudos/scene-graph-manager": "file:/Users/akirakudo/Desktop/MyWork/TypeScript/SceneGraphManager/kudos-scene-graph-manager-2.0.0.tgz",
