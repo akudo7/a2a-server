@@ -318,7 +318,7 @@ The workflow engine uses **SceneGraphManager v2.0.0** (private package):
 - Loads and validates JSON workflow configurations
 - Builds LangGraph state machines
 - Manages model initialization (OpenAI, Anthropic, Ollama)
-- Configures MCP servers and A2A clients
+- Configures MCP servers and A2A servers
 - Executes workflows with checkpointing
 
 **Learn more**: See [OpenAgentJson](https://github.com/akudo7/OpenAgentJson) for JSON workflow file format documentation
@@ -327,8 +327,8 @@ The workflow engine uses **SceneGraphManager v2.0.0** (private package):
 
 Workflows can communicate with other A2A agents:
 
-1. Define A2A clients in the `a2aClients` section
-2. Bind clients to models via `bindA2AClients`
+1. Define A2A servers in the `a2aServers` section
+2. Bind servers to models via `bindA2AServers`
 3. Use generated tools in workflow nodes: `send_message_to_agentName()`
 
 ## Development
