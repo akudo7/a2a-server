@@ -293,7 +293,7 @@ Workflows are defined in JSON files. For detailed JSON workflow file format spec
 }
 ```
 
-**Full examples available in:** [kudosflow](https://github.com/akudo7/kudosflow) repository
+**Full examples available in:** [kudosflow2](https://github.com/akudo7/kudosflow) repository
 
 - [task-creation.json](https://github.com/akudo7/kudosflow/blob/main/json/research/task-creation.json) - Task creation agent
 - [research-execution.json](https://github.com/akudo7/kudosflow/blob/main/json/research/research-execution.json) - Research execution agent
@@ -562,7 +562,7 @@ Validate JSON configuration files for syntax errors and required fields.
 ## Documentation & Resources
 
 - **[OpenAgentJson](https://github.com/akudo7/OpenAgentJson)** - JSON workflow file format documentation and examples
-- **[kudosflow](https://github.com/akudo7/kudosflow)** - Complete multi-agent research system sample
+- **[kudosflow2](https://github.com/akudo7/kudosflow)** - Complete multi-agent research system sample
 - **[A2A Protocol Spec](https://google-a2a.github.io/A2A)** - Official protocol documentation
 - **[LangGraph](https://langchain-ai.github.io/langgraph/)** - Workflow orchestration framework
 - **[A2A SDK](https://github.com/google/a2a-sdk)** - A2A JavaScript SDK
@@ -573,7 +573,7 @@ This server is part of a larger AI agent ecosystem:
 
 - **SceneGraphManager v2.0.0** - Core JSON workflow engine (private package)
 - **[OpenAgentJson](https://github.com/akudo7/OpenAgentJson)** - JSON workflow file format documentation
-- **[kudosflow](https://github.com/akudo7/kudosflow)** - Complete multi-agent research system
+- **[kudosflow2](https://github.com/akudo7/kudosflow)** - Complete multi-agent research system
 
 ## Contributing
 
@@ -600,7 +600,7 @@ See the [LICENSE](LICENSE) file for complete details.
 For issues and questions:
 
 - Review [OpenAgentJson documentation](https://github.com/akudo7/OpenAgentJson) for JSON workflow file format specification
-- Check [kudosflow sample](https://github.com/akudo7/kudosflow) for multi-agent system examples
+- Check [kudosflow2 sample](https://github.com/akudo7/kudosflow) for multi-agent system examples
 - Review server logs for error details
 - Verify environment variables and configuration files
 - Test with simple workflows first

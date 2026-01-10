@@ -1,6 +1,6 @@
 # JSON Workflow Configuration Debugging Guide
 
-This document explains how to debug JSON workflow configuration files for kudosflow.
+This document explains how to debug JSON workflow configuration files for kudosflow2.
 
 ## Table of Contents
 
